@@ -106,6 +106,16 @@ export class BookingStateManager {
    */
   static async completeConversation(botId: string, customerPhone: string): Promise<void> {
     try {
+      // First, delete any old completed conversations for this customer
+      // This prevents unique constraint violations
+      await supabaseAdmin
+        .from('booking_conversations')
+        .delete()
+        .eq('bot_id', botId)
+        .eq('customer_phone', customerPhone)
+        .eq('is_completed', true);
+
+      // Now update the current active conversation to completed
       const { error } = await supabaseAdmin
         .from('booking_conversations')
         .update({
@@ -118,13 +128,22 @@ export class BookingStateManager {
         .eq('is_completed', false);
 
       if (error) {
-        logger.error({ err: String(error) }, 'Error completing conversation');
+        logger.error({
+          err: JSON.stringify(error),
+          botId,
+          customerPhone,
+          errorDetails: error
+        }, 'Error completing conversation');
         throw error;
       }
 
       logger.info({ botId, customerPhone }, 'Booking conversation completed');
     } catch (error) {
-      logger.error({ err: String(error) }, 'Error in completeConversation');
+      logger.error({
+        err: JSON.stringify(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined
+      }, 'Error in completeConversation');
       throw error;
     }
   }
@@ -134,6 +153,16 @@ export class BookingStateManager {
    */
   static async cancelConversation(botId: string, customerPhone: string): Promise<void> {
     try {
+      // First, delete any old completed conversations for this customer
+      // This prevents unique constraint violations
+      await supabaseAdmin
+        .from('booking_conversations')
+        .delete()
+        .eq('bot_id', botId)
+        .eq('customer_phone', customerPhone)
+        .eq('is_completed', true);
+
+      // Now update the current active conversation to completed/cancelled
       const { error } = await supabaseAdmin
         .from('booking_conversations')
         .update({

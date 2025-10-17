@@ -14,11 +14,65 @@ const logger = pino({ level: 'info' });
 
 export class BookingService {
   /**
-   * Check if message is a booking trigger
+   * Check if message is a booking trigger using enhanced detection
+   * Combines keyword matching with semantic analysis
    */
   static isBookingTrigger(message: string, keywords: string[]): boolean {
-    const lowerMessage = message.toLowerCase();
-    return keywords.some((keyword) => lowerMessage.includes(keyword.toLowerCase()));
+    const lowerMessage = message.toLowerCase().trim();
+
+    // Enhanced keyword patterns - more comprehensive
+    const enhancedKeywords = [
+      ...keywords,
+      'appointment',
+      'book',
+      'booking',
+      'schedule',
+      'reserve',
+      'reservation',
+      'visit',
+      'come in',
+      'slot',
+      'time slot',
+      'available',
+      'availability',
+      'when can i',
+      'can i come',
+      'want to come',
+      'need appointment',
+      'make appointment',
+      'set appointment',
+      'fix appointment',
+      'book time',
+      'book slot',
+      'free slot',
+      'free time',
+      'book service',
+      'schedule service',
+      'arrange',
+      'meeting',
+      'consultation',
+    ];
+
+    // Check for any keyword match
+    const hasKeyword = enhancedKeywords.some((keyword) =>
+      lowerMessage.includes(keyword.toLowerCase())
+    );
+
+    if (hasKeyword) {
+      return true;
+    }
+
+    // Check for booking-related patterns using regex
+    const bookingPatterns = [
+      /\b(want|need|like|would like)\s+(to\s+)?(book|schedule|reserve|appointment)\b/i,
+      /\b(can|could|may)\s+i\s+(book|schedule|get|have)\b/i,
+      /\b(i'?d\s+like|i\s+want)\s+(to\s+)?(make|set|fix)\b/i,
+      /\b(when|what time)\s+(can|could|should)\s+i\b/i,
+      /\b(are\s+you|you\s+)?(available|open|free)\b/i,
+      /\b(do\s+you\s+have|got\s+any)\s+(slots?|time|availability)\b/i,
+    ];
+
+    return bookingPatterns.some(pattern => pattern.test(lowerMessage));
   }
 
   /**

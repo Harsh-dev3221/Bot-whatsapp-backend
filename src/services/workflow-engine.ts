@@ -3,6 +3,7 @@ import { logger } from '../utils/logger.js';
 import type { MessagingAdapter } from '../adapters/messaging-adapter.js';
 import { AIService } from './ai-service.js';
 import { AIContextService } from './ai-context-service.js';
+import { BookingService } from './booking-service.js';
 
 // Minimal WorkflowEngine (Phase 1)
 // - Trigger match on keywords
@@ -10,7 +11,7 @@ import { AIContextService } from './ai-context-service.js';
 // - Send prompt for first step; collect_field will just prompt for now
 // - ai_response delegates to AIService.generateResponse
 
-export type WorkflowStepType = 'collect_field' | 'ai_response' | 'show_options' | 'share_media' | 'conditional';
+export type WorkflowStepType = 'collect_field' | 'ai_response' | 'show_options' | 'share_media' | 'conditional' | 'start_booking';
 
 interface WorkflowRecord {
   id: string;
@@ -87,6 +88,21 @@ export class WorkflowEngine {
 
       // Send initial prompt or media depending on step type
       const prompt = firstStep.prompt_message || 'How can I help you?';
+
+      // Handle start_booking step - hand off to booking system
+      if (firstStep.type === 'start_booking') {
+        // Mark workflow conversation as completed
+        await supabaseAdmin
+          .from('workflow_conversations')
+          .update({ is_completed: true })
+          .eq('bot_id', botId)
+          .eq('user_key', userKey)
+          .eq('workflow_id', matched.id);
+
+        // Start the booking conversation using existing booking system
+        await BookingService.handleBookingMessage(adapter, message);
+        return true;
+      }
 
       if (firstStep.type === 'share_media') {
         const media = await AIContextService.getBotMedia(adapter.getBotId());
@@ -199,6 +215,19 @@ export class WorkflowEngine {
 
       // Shallow clone state
       const state = { ...(convo.state || {}) } as Record<string, any>;
+
+      // Handle start_booking step - hand off to booking system
+      if (step.type === 'start_booking') {
+        // Mark workflow conversation as completed
+        await supabaseAdmin
+          .from('workflow_conversations')
+          .update({ is_completed: true })
+          .eq('id', convo.id);
+
+        // Start the booking conversation using existing booking system
+        await BookingService.handleBookingMessage(adapter, message);
+        return true;
+      }
 
       // Handle step types
       if (step.type === 'collect_field') {
@@ -314,6 +343,19 @@ export class WorkflowEngine {
 
       const next = steps.find((s: any) => (s.id || 'step1') === nextId) || steps[idx + 1];
       if (!next) return true;
+
+      // Handle start_booking step when moving to next
+      if (next.type === 'start_booking') {
+        // Mark workflow conversation as completed
+        await supabaseAdmin
+          .from('workflow_conversations')
+          .update({ is_completed: true, state })
+          .eq('id', convo.id);
+
+        // Start the booking conversation using existing booking system
+        await BookingService.handleBookingMessage(adapter, message);
+        return true;
+      }
 
       const prompt = next.prompt_message || 'Please continue...';
       if (next.type === 'show_options' && next.options_config?.options?.length) {

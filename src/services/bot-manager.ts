@@ -435,20 +435,10 @@ export class BotManager {
 
       if (!messageContent) return;
 
-      // Try WorkflowEngine first (default ON)
-      try {
-        const adapter = new WhatsAppAdapter(sock, {
-          botId,
-          businessId,
-          userKey: fromNumber,
-        });
-        const handled = await WorkflowEngine.tryHandle(adapter, messageContent);
-        if (handled) return;
-      } catch (e) {
-        logger.warn({ botId, err: String(e) }, 'WorkflowEngine tryHandle failed, falling back');
-      }
-
-      // Check if booking is enabled and handle booking conversation
+      // ====================================================================
+      // PRIORITY 1: Check if booking is enabled and handle booking FIRST
+      // This ensures booking system takes precedence over workflows
+      // ====================================================================
       const bookingEnabled = await BookingService.isBookingEnabled(botId);
       logger.info({ botId, bookingEnabled }, 'Booking enabled check');
 
@@ -469,17 +459,17 @@ export class BotManager {
           });
 
           await BookingService.handleBookingMessage(adapter, messageContent);
-          return; // Don't process with regular AI
+          return; // Don't process with regular AI or workflow
         }
 
-        // Check if message is a booking trigger
+        // Check if message is a booking trigger (keyword-based)
         const keywords = await BookingService.getBookingKeywords(botId);
         const isBookingTrigger = BookingService.isBookingTrigger(messageContent, keywords);
         logger.info({ botId, messageContent, keywords, isBookingTrigger }, 'Booking trigger check');
 
         if (isBookingTrigger) {
           // Start booking conversation
-          logger.info({ botId, fromNumber }, 'Starting new booking conversation');
+          logger.info({ botId, fromNumber }, 'Starting new booking conversation (keyword trigger)');
 
           // Create WhatsAppAdapter for booking service
           const adapter = new WhatsAppAdapter(sock, {
@@ -489,8 +479,24 @@ export class BotManager {
           });
 
           await BookingService.handleBookingMessage(adapter, messageContent);
-          return; // Don't process with regular AI
+          return; // Don't process with regular AI or workflow
         }
+      }
+
+      // ====================================================================
+      // PRIORITY 2: Try WorkflowEngine for other intents (default ON)
+      // This only runs if booking didn't handle the message
+      // ====================================================================
+      try {
+        const adapter = new WhatsAppAdapter(sock, {
+          botId,
+          businessId,
+          userKey: fromNumber,
+        });
+        const handled = await WorkflowEngine.tryHandle(adapter, messageContent);
+        if (handled) return;
+      } catch (e) {
+        logger.warn({ botId, err: String(e) }, 'WorkflowEngine tryHandle failed, falling back');
       }
 
       // Save message to database
@@ -534,7 +540,19 @@ export class BotManager {
       if (aiEnabled) {
         // Use AI to detect intent and generate response
         try {
-          const intentResult = await AIService.detectIntent(messageContent, botId, history);
+          // Get business context for AI
+          const aiContext = await AIContextService.getBotAIContext(botId);
+          const businessContextForAI = aiContext ? {
+            name: aiContext.businessName,
+            description: aiContext.businessDescription,
+            industry: aiContext.businessType,
+            services: [], // Can be populated from bot settings if needed
+            location: aiContext.businessAddress,
+            contact_email: null,
+            contact_phone: null,
+          } : undefined;
+
+          const intentResult = await AIService.detectIntent(messageContent, botId, history, businessContextForAI);
 
           logger.info({
             botId,
@@ -543,6 +561,21 @@ export class BotManager {
             confidence: intentResult.confidence,
             sentiment: intentResult.sentiment,
           }, 'AI intent detected');
+
+          // Check if AI detected BOOKING_REQUEST intent
+          if (bookingEnabled && intentResult.intention === 'BOOKING_REQUEST' && intentResult.confidence >= 0.7) {
+            logger.info({ botId, fromNumber, confidence: intentResult.confidence }, 'Starting booking conversation (AI intent)');
+
+            // Create WhatsAppAdapter for booking service
+            const adapter = new WhatsAppAdapter(sock, {
+              botId,
+              businessId,
+              userKey: fromNumber,
+            });
+
+            await BookingService.handleBookingMessage(adapter, messageContent);
+            return; // Don't process with regular AI
+          }
 
           // Handle OFF_TOPIC - strictly redirect
           if (intentResult.intention === 'OFF_TOPIC') {

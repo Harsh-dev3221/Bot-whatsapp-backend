@@ -10,6 +10,7 @@
 import { logger } from '../utils/logger.js';
 import { supabaseAdmin } from '../db/supabase.js';
 import { AIService } from './ai-service.js';
+import { AIContextService } from './ai-context-service.js';
 import { BookingService } from './booking-service.js';
 import { BookingStateManager } from './booking-state-manager.js';
 import { WebAdapter } from '../adapters/web-adapter.js';
@@ -61,15 +62,10 @@ export async function handleWebMessage(
       message: messageContent.substring(0, 50)
     }, 'Web message received');
 
-    // Try WorkflowEngine first (default ON)
-    try {
-      const handled = await WorkflowEngine.tryHandle(adapter, messageContent);
-      if (handled) return;
-    } catch (e) {
-      logger.warn({ botId, err: String(e) }, 'WorkflowEngine tryHandle failed (web), falling back');
-    }
-
-    // Check if booking is enabled and handle booking conversation
+    // ====================================================================
+    // PRIORITY 1: Check if booking is enabled and handle booking FIRST
+    // This ensures booking system takes precedence over workflows
+    // ====================================================================
     const bookingEnabled = await BookingService.isBookingEnabled(botId);
     logger.info({ botId, bookingEnabled }, 'Booking enabled check (web)');
 
@@ -88,17 +84,17 @@ export async function handleWebMessage(
         await BookingService.handleBookingMessage(adapter, messageContent);
 
         await adapter.sendTyping('stop');
-        return; // Don't process with regular AI
+        return; // Don't process with regular AI or workflow
       }
 
-      // Check if message is a booking trigger
+      // Check if message is a booking trigger (keyword-based)
       const keywords = await BookingService.getBookingKeywords(botId);
       const isBookingTrigger = BookingService.isBookingTrigger(messageContent, keywords);
       logger.info({ botId, messageContent, keywords, isBookingTrigger }, 'Booking trigger check (web)');
 
       if (isBookingTrigger) {
         // Start booking conversation
-        logger.info({ botId, sessionId }, 'Starting new booking conversation (web)');
+        logger.info({ botId, sessionId }, 'Starting new booking conversation (web - keyword trigger)');
 
         // Send typing indicator
         await adapter.sendTyping('start');
@@ -106,8 +102,19 @@ export async function handleWebMessage(
         await BookingService.handleBookingMessage(adapter, messageContent);
 
         await adapter.sendTyping('stop');
-        return; // Don't process with regular AI
+        return; // Don't process with regular AI or workflow
       }
+    }
+
+    // ====================================================================
+    // PRIORITY 2: Try WorkflowEngine for other intents (default ON)
+    // This only runs if booking didn't handle the message
+    // ====================================================================
+    try {
+      const handled = await WorkflowEngine.tryHandle(adapter, messageContent);
+      if (handled) return;
+    } catch (e) {
+      logger.warn({ botId, err: String(e) }, 'WorkflowEngine tryHandle failed (web), falling back');
     }
 
     // Get bot, widget settings, and business context (web bots use widget_settings, not bot_settings)
@@ -126,20 +133,6 @@ export async function handleWebMessage(
       return;
     }
 
-
-    // Get business context
-    const { data: business } = await supabaseAdmin
-      .from('businesses')
-      .select('name, description, industry, services')
-      .eq('id', businessId)
-      .single();
-
-    // Build context for AI
-    const businessContext = business
-      ? `Business: ${business.name}\nDescription: ${business.description || 'N/A'}\nIndustry: ${business.industry || 'N/A'}\nServices: ${business.services?.join(', ') || 'N/A'}`
-      : 'No business context available';
-
-
     // Get or initialize conversation history
     const historyKey = `${botId}-${sessionId}`;
     if (!conversationHistory.has(historyKey)) {
@@ -156,41 +149,60 @@ export async function handleWebMessage(
     // Send typing indicator
     await adapter.sendTyping('start');
 
-    // Detect intent (disabled for web bots by default, can be enabled later)
+    // Detect intent with AI
     let intentResult = null;
-    const intentDetectionEnabled = false; // TODO: Add to widget settings if needed
-    if (intentDetectionEnabled) {
-      try {
-        intentResult = await AIService.detectIntent(
-          messageContent,
-          businessContext,
-          history
-        );
+    try {
+      // Get business context for AI
+      const aiContext = await AIContextService.getBotAIContext(botId);
+      const businessContextForAI = aiContext ? {
+        name: aiContext.businessName,
+        description: aiContext.businessDescription,
+        industry: aiContext.businessType,
+        services: [], // Can be populated from bot settings if needed
+        location: aiContext.businessAddress,
+        contact_email: null,
+        contact_phone: null,
+      } : undefined;
 
-        logger.info({
-          botId,
-          sessionId,
+      intentResult = await AIService.detectIntent(
+        messageContent,
+        botId,
+        history,
+        businessContextForAI
+      );
+
+      logger.info({
+        botId,
+        sessionId,
+        intent: intentResult.intention,
+        confidence: intentResult.confidence,
+      }, 'Intent detected (web)');
+
+      // Check if AI detected BOOKING_REQUEST intent
+      if (bookingEnabled && intentResult.intention === 'BOOKING_REQUEST' && intentResult.confidence >= 0.7) {
+        logger.info({ botId, sessionId, confidence: intentResult.confidence }, 'Starting booking conversation (web - AI intent)');
+
+        await BookingService.handleBookingMessage(adapter, messageContent);
+        await adapter.sendTyping('stop');
+        return; // Don't process with regular AI
+      }
+
+      // Save intent data
+      await supabaseAdmin.from('messages').update({
+        metadata: {
           intent: intentResult.intention,
           confidence: intentResult.confidence,
-        }, 'Intent detected (web)');
-
-        // Save intent data
-        await supabaseAdmin.from('messages').update({
-          metadata: {
-            intent: intentResult.intention,
-            confidence: intentResult.confidence,
-            sentiment: intentResult.sentiment,
-          },
-        } as any)
-          .eq('bot_id', botId)
-          .eq('session_id', sessionId)
-          .eq('content', messageContent)
-          .eq('direction', 'inbound')
-          .order('created_at', { ascending: false })
-          .limit(1);
-      } catch (error) {
-        logger.error({ err: String(error) }, 'Error detecting intent (web)');
-      }
+          sentiment: intentResult.sentiment,
+        },
+      } as any)
+        .eq('bot_id', botId)
+        .eq('session_id', sessionId)
+        .eq('content', messageContent)
+        .eq('direction', 'inbound')
+        .order('created_at', { ascending: false })
+        .limit(1);
+    } catch (error) {
+      logger.error({ err: String(error) }, 'Error detecting intent (web)');
     }
 
     // Generate AI response

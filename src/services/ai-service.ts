@@ -27,6 +27,7 @@ const intentSchema = z.object({
     'CLOSURE',
     'LOCATION_REQUEST',
     'SERVICE_INQUIRY',
+    'BOOKING_REQUEST',
     'OFF_TOPIC',
     'UNKNOWN'
   ]).describe('Categorize the user message into one of the predefined intentions'),
@@ -47,7 +48,8 @@ export class AIService {
   static async detectIntent(
     message: string,
     botId: string,
-    conversationHistory: string[] = []
+    conversationHistory: string[] = [],
+    businessContext?: any
   ): Promise<IntentResult> {
     try {
       if (!env.ai.geminiApiKey) {
@@ -101,6 +103,7 @@ export class AIService {
       systemPrompt += '- CLOSURE: User is ending the conversation\n';
       systemPrompt += '- LOCATION_REQUEST: User is asking about location or address\n';
       systemPrompt += '- SERVICE_INQUIRY: User is asking about specific services\n';
+      systemPrompt += '- BOOKING_REQUEST: User wants to book, schedule, reserve, or make an appointment (ANY mention of booking, appointment, schedule, reservation, or wanting to come in/visit)\n';
       systemPrompt += '- OFF_TOPIC: User is asking about FORBIDDEN topics or topics not related to the business\n';
       systemPrompt += '- UNKNOWN: Intent is unclear or doesn\'t fit other categories\n\n';
 
@@ -109,7 +112,32 @@ export class AIService {
       systemPrompt += '1. If user asks about ANY forbidden topic, immediately classify as OFF_TOPIC\n';
       systemPrompt += '2. Politely but firmly redirect to business-related topics\n';
       systemPrompt += '3. Do NOT engage with forbidden topics even if user insists\n';
-      systemPrompt += '4. Keep responses focused on business services and offerings';
+      systemPrompt += '4. Keep responses focused on business services and offerings\n\n';
+
+      // Add business context if available
+      if (businessContext) {
+        systemPrompt += 'BUSINESS CONTEXT:\n';
+        systemPrompt += `Business Name: ${businessContext.name}\n`;
+        if (businessContext.description) {
+          systemPrompt += `About: ${businessContext.description}\n`;
+        }
+        if (businessContext.industry) {
+          systemPrompt += `Industry: ${businessContext.industry}\n`;
+        }
+        if (businessContext.services && businessContext.services.length > 0) {
+          systemPrompt += `Services: ${businessContext.services.join(', ')}\n`;
+        }
+        if (businessContext.location) {
+          systemPrompt += `Location: ${businessContext.location}\n`;
+        }
+        if (businessContext.contact_email) {
+          systemPrompt += `Email: ${businessContext.contact_email}\n`;
+        }
+        if (businessContext.contact_phone) {
+          systemPrompt += `Phone: ${businessContext.contact_phone}\n`;
+        }
+        systemPrompt += '\n';
+      }
 
       // Create prompt template with business context
       const contextualIntentPrompt = ChatPromptTemplate.fromMessages([
