@@ -1,0 +1,41 @@
+{
+  "name": "whatsapp-bot-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "WhatsApp Bot SaaS Backend with Hono and Baileys",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "reset-bot-passwords": "tsx src/scripts/reset-bot-passwords.ts"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@hono/node-server": "^1.13.7",
+    "@langchain/core": "^0.3.78",
+    "@langchain/google-genai": "^0.2.18",
+    "@supabase/supabase-js": "^2.39.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "bcryptjs": "^3.0.2",
+    "dotenv": "^17.2.3",
+    "hono": "^4.6.14",
+    "jsonwebtoken": "^9.0.2",
+    "langchain": "^0.3.36",
+    "pino": "^9.5.0",
+    "pino-pretty": "^13.0.0",
+    "qrcode": "^1.5.4",
+    "ws": "^8.18.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
+    "@types/node": "^22.10.5",
+    "@types/qrcode": "^1.5.5",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
