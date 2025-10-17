@@ -14,6 +14,7 @@ import QRCode from 'qrcode';
 import { supabaseAdmin } from '../db/supabase.js';
 import { AIService } from './ai-service.js';
 import { BookingService } from './booking-service.js';
+import { WorkflowEngine } from './workflow-engine.js';
 import { BookingStateManager } from './booking-state-manager.js';
 import { MediaService } from './media-service.js';
 import { AIContextService } from './ai-context-service.js';
@@ -433,6 +434,19 @@ export class BotManager {
         '';
 
       if (!messageContent) return;
+
+      // Try WorkflowEngine first (default ON)
+      try {
+        const adapter = new WhatsAppAdapter(sock, {
+          botId,
+          businessId,
+          userKey: fromNumber,
+        });
+        const handled = await WorkflowEngine.tryHandle(adapter, messageContent);
+        if (handled) return;
+      } catch (e) {
+        logger.warn({ botId, err: String(e) }, 'WorkflowEngine tryHandle failed, falling back');
+      }
 
       // Check if booking is enabled and handle booking conversation
       const bookingEnabled = await BookingService.isBookingEnabled(botId);

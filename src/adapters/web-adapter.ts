@@ -380,5 +380,60 @@ export class WebAdapter implements MessagingAdapter {
       // Don't throw - database save is non-critical for message delivery
     }
   }
+
+  /**
+   * Send document file via WebSocket
+   */
+  async sendDocument(options: { url: string; fileName?: string; mimeType?: string; caption?: string; title?: string }): Promise<void> {
+    try {
+      // Send document as a message with file metadata at the top level
+      const event: WebSocketEvent & { messageType?: string; fileUrl?: string; fileName?: string; mimeType?: string } = {
+        type: 'bot_message',
+        id: this.generateMessageId(),
+        text: options.caption || options.title || '',
+        ts: new Date().toISOString(),
+        final: true,
+        messageType: 'document',
+        fileUrl: options.url,
+        fileName: options.fileName || 'document.pdf',
+        mimeType: options.mimeType || 'application/pdf',
+      };
+
+      this.sendEvent(event as any);
+
+      // Save to database
+      await this.saveMessage({
+        content: options.caption || `Document: ${options.fileName || 'document.pdf'}`,
+        messageType: 'document',
+        direction: 'outbound',
+        metadata: {
+          url: options.url,
+          fileName: options.fileName,
+          mimeType: options.mimeType,
+        },
+      });
+
+      logger.info(
+        {
+          botId: this.context.botId,
+          sessionId: this.sessionId,
+          documentUrl: options.url,
+          fileName: options.fileName,
+        },
+        'Web document sent'
+      );
+    } catch (error) {
+      logger.error(
+        {
+          err: String(error),
+          botId: this.context.botId,
+          sessionId: this.sessionId,
+          documentUrl: options.url,
+        },
+        'Error sending web document'
+      );
+      throw error;
+    }
+  }
 }
 

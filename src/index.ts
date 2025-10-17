@@ -16,6 +16,8 @@ import botContextRoutes from './routes/bot-context.js';
 import botDashboardRoutes from './routes/bot-dashboard.js';
 import webviewRoutes from './routes/webview.js';
 import webBotRoutes from './routes/web-bot.js';
+import workflowsRoutes from './routes/workflows.js';
+import inquiriesRoutes from './routes/inquiries.js';
 import { BotManager } from './services/bot-manager.js';
 import { initWebSocketServer } from './websocket/ws-server.js';
 
@@ -83,6 +85,8 @@ app.route('/api/messages', messagesRoutes);
 app.route('/api/bot-dashboard', botDashboardRoutes);
 app.route('/api/webview', webviewRoutes);
 app.route('/api/web-bot', webBotRoutes);
+app.route('/api/workflows', workflowsRoutes);
+app.route('/api/inquiries', inquiriesRoutes);
 
 // 404 handler
 app.notFound((c) => {

@@ -193,7 +193,6 @@ export class BookingService {
     state: ConversationState
   ): Promise<void> {
     const botId = adapter.getBotId();
-    const businessId = adapter.getBusinessId();
     const customerPhone = adapter.getUserKey();
 
     const validation = BookingValidator.validateBookingFor(message);

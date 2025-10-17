@@ -75,18 +75,49 @@ app.post('/', async (c) => {
 
     if (error) throw error;
 
-    // Create default bot settings with booking enabled by default
+    // Create default bot settings with booking + workflows enabled by default
     await supabaseAdmin.from('bot_settings').insert({
       bot_id: (bot as any).id,
       auto_reply_enabled: false,
       business_hours_enabled: false,
-      booking_enabled: true, // Enable booking by default for all new bots
+      booking_enabled: true, // keep booking for backward-compat
       booking_trigger_keywords: ['book', 'booking', 'appointment', 'schedule', 'reserve'],
       booking_confirmation_message: 'Your booking has been confirmed! We look forward to seeing you.',
       booking_cancellation_message: 'Your booking has been cancelled. Feel free to book again anytime!',
       booking_require_gender: true,
       booking_require_booking_for: true,
+      workflow_enabled: true,
+      workflow_setup_required: true,
     } as any);
+
+    // If initial_workflows provided, create them now and clear setup_required when published exists
+    if (Array.isArray((body as any).initial_workflows) && (body as any).initial_workflows.length > 0) {
+      const workflowsPayload = (body as any).initial_workflows.map((wf: any) => ({
+        ...wf,
+        bot_id: (bot as any).id,
+      }));
+      const { data: createdWf, error: wfErr } = await supabaseAdmin
+        .from('workflows')
+        .insert(workflowsPayload as any)
+        .select();
+      if (wfErr) throw wfErr;
+      const hasPublished = (createdWf || []).some((w: any) => w.status === 'published' && w.is_active);
+      if (hasPublished) {
+        await supabaseAdmin
+          .from('bot_settings')
+          .update({ workflow_setup_required: false } as any)
+          .eq('bot_id', (bot as any).id);
+      }
+    }
+
+    // Optional: initial knowledge base
+    if (Array.isArray((body as any).knowledge_base) && (body as any).knowledge_base.length > 0) {
+      const kbPayload = (body as any).knowledge_base.map((kb: any) => ({
+        ...kb,
+        bot_id: (bot as any).id,
+      }));
+      await supabaseAdmin.from('knowledge_base').insert(kbPayload as any);
+    }
 
     return c.json<ApiResponse>({
       success: true,

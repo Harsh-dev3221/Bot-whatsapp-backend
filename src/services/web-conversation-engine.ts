@@ -14,6 +14,8 @@ import { BookingService } from './booking-service.js';
 import { BookingStateManager } from './booking-state-manager.js';
 import { WebAdapter } from '../adapters/web-adapter.js';
 import { sendEventToSession } from '../websocket/ws-server.js';
+import { WorkflowEngine } from './workflow-engine.js';
+
 
 // Store conversation history for AI context (in-memory)
 const conversationHistory = new Map<string, string[]>();
@@ -58,6 +60,14 @@ export async function handleWebMessage(
       sessionId,
       message: messageContent.substring(0, 50)
     }, 'Web message received');
+
+    // Try WorkflowEngine first (default ON)
+    try {
+      const handled = await WorkflowEngine.tryHandle(adapter, messageContent);
+      if (handled) return;
+    } catch (e) {
+      logger.warn({ botId, err: String(e) }, 'WorkflowEngine tryHandle failed (web), falling back');
+    }
 
     // Check if booking is enabled and handle booking conversation
     const bookingEnabled = await BookingService.isBookingEnabled(botId);
@@ -116,9 +126,6 @@ export async function handleWebMessage(
       return;
     }
 
-    const widgetSettings = Array.isArray(bot.bot_widget_settings)
-      ? bot.bot_widget_settings[0]
-      : bot.bot_widget_settings;
 
     // Get business context
     const { data: business } = await supabaseAdmin
@@ -132,7 +139,6 @@ export async function handleWebMessage(
       ? `Business: ${business.name}\nDescription: ${business.description || 'N/A'}\nIndustry: ${business.industry || 'N/A'}\nServices: ${business.services?.join(', ') || 'N/A'}`
       : 'No business context available';
 
-    const aiInstructions = widgetSettings.greeting || 'You are a helpful AI assistant. Be friendly and professional.';
 
     // Get or initialize conversation history
     const historyKey = `${botId}-${sessionId}`;

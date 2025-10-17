@@ -36,10 +36,6 @@ const endSessionSchema = z.object({
   reason: z.string().optional(),
 });
 
-const typingSchema = z.object({
-  sessionId: z.string().uuid(),
-  state: z.enum(['start', 'stop']),
-});
 
 // ============================================
 // HELPER FUNCTIONS
@@ -256,7 +252,6 @@ app.get('/:botId/history', async (c) => {
     const sessionId = c.req.query('sessionId');
     const limit = parseInt(c.req.query('limit') || '30');
     const cursor = c.req.query('cursor'); // Message ID for pagination
-    const origin = c.req.header('Origin') || c.req.header('Referer') || '';
 
     if (!sessionId) {
       return c.json({ error: { code: 'invalid_request', message: 'sessionId is required' } }, 400);

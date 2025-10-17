@@ -1,9 +1,9 @@
 /**
  * WhatsAppAdapter
- * 
+ *
  * Implements MessagingAdapter for WhatsApp channel using Baileys WASocket
  * Wraps existing WhatsApp send logic into the unified adapter interface
- * 
+ *
  * Architecture: docs/WEB_CHAT_ARCHITECTURE.txt Section 4
  */
 
@@ -27,11 +27,11 @@ export class WhatsAppAdapter implements MessagingAdapter {
   constructor(sock: WASocket, context: AdapterContext) {
     this.sock = sock;
     this.context = context;
-    
+
     // Format phone number to JID
     const phoneNumber = context.userKey;
-    this.jid = phoneNumber.includes('@') 
-      ? phoneNumber 
+    this.jid = phoneNumber.includes('@')
+      ? phoneNumber
       : `${phoneNumber}@s.whatsapp.net`;
   }
 
@@ -53,20 +53,20 @@ export class WhatsAppAdapter implements MessagingAdapter {
       });
 
       logger.info(
-        { 
-          botId: this.context.botId, 
-          to: this.context.userKey, 
-          text: options.text.substring(0, 50) 
-        }, 
+        {
+          botId: this.context.botId,
+          to: this.context.userKey,
+          text: options.text.substring(0, 50)
+        },
         'WhatsApp text sent'
       );
     } catch (error) {
       logger.error(
-        { 
-          err: String(error), 
-          botId: this.context.botId, 
-          to: this.context.userKey 
-        }, 
+        {
+          err: String(error),
+          botId: this.context.botId,
+          to: this.context.userKey
+        },
         'Error sending WhatsApp text'
       );
       throw error;
@@ -83,19 +83,19 @@ export class WhatsAppAdapter implements MessagingAdapter {
       await this.sock.sendMessage(this.jid, options.components);
 
       logger.info(
-        { 
-          botId: this.context.botId, 
-          to: this.context.userKey 
-        }, 
+        {
+          botId: this.context.botId,
+          to: this.context.userKey
+        },
         'WhatsApp rich content sent'
       );
     } catch (error) {
       logger.error(
-        { 
-          err: String(error), 
-          botId: this.context.botId, 
-          to: this.context.userKey 
-        }, 
+        {
+          err: String(error),
+          botId: this.context.botId,
+          to: this.context.userKey
+        },
         'Error sending WhatsApp rich content'
       );
       throw error;
@@ -114,20 +114,20 @@ export class WhatsAppAdapter implements MessagingAdapter {
       );
 
       logger.debug(
-        { 
-          botId: this.context.botId, 
-          to: this.context.userKey, 
-          state 
-        }, 
+        {
+          botId: this.context.botId,
+          to: this.context.userKey,
+          state
+        },
         'WhatsApp typing indicator sent'
       );
     } catch (error) {
       logger.error(
-        { 
-          err: String(error), 
-          botId: this.context.botId, 
-          to: this.context.userKey 
-        }, 
+        {
+          err: String(error),
+          botId: this.context.botId,
+          to: this.context.userKey
+        },
         'Error sending WhatsApp typing indicator'
       );
       // Don't throw - typing indicators are non-critical
@@ -143,20 +143,20 @@ export class WhatsAppAdapter implements MessagingAdapter {
       await this.sendText({ text: errorText });
 
       logger.warn(
-        { 
-          botId: this.context.botId, 
-          to: this.context.userKey, 
-          code: options.code 
-        }, 
+        {
+          botId: this.context.botId,
+          to: this.context.userKey,
+          code: options.code
+        },
         'WhatsApp error message sent'
       );
     } catch (error) {
       logger.error(
-        { 
-          err: String(error), 
-          botId: this.context.botId, 
-          to: this.context.userKey 
-        }, 
+        {
+          err: String(error),
+          botId: this.context.botId,
+          to: this.context.userKey
+        },
         'Error sending WhatsApp error message'
       );
       // Don't throw - error messages are best-effort
@@ -222,10 +222,10 @@ export class WhatsAppAdapter implements MessagingAdapter {
       } as any);
     } catch (error) {
       logger.error(
-        { 
-          err: String(error), 
-          botId: this.context.botId 
-        }, 
+        {
+          err: String(error),
+          botId: this.context.botId
+        },
         'Error saving WhatsApp message to database'
       );
       // Don't throw - database save is non-critical for message delivery
@@ -244,20 +244,20 @@ export class WhatsAppAdapter implements MessagingAdapter {
       });
 
       logger.info(
-        { 
-          botId: this.context.botId, 
-          to: this.context.userKey, 
-          imageUrl 
-        }, 
+        {
+          botId: this.context.botId,
+          to: this.context.userKey,
+          imageUrl,
+        },
         'WhatsApp image sent'
       );
     } catch (error) {
       logger.error(
-        { 
-          err: String(error), 
-          botId: this.context.botId, 
-          to: this.context.userKey 
-        }, 
+        {
+          err: String(error),
+          botId: this.context.botId,
+          to: this.context.userKey,
+        },
         'Error sending WhatsApp image'
       );
       throw error;
@@ -281,22 +281,57 @@ export class WhatsAppAdapter implements MessagingAdapter {
       });
 
       logger.info(
-        { 
-          botId: this.context.botId, 
-          to: this.context.userKey, 
-          latitude, 
-          longitude 
-        }, 
+        {
+          botId: this.context.botId,
+          to: this.context.userKey,
+          latitude,
+          longitude
+        },
         'WhatsApp location sent'
       );
     } catch (error) {
       logger.error(
-        { 
-          err: String(error), 
-          botId: this.context.botId, 
-          to: this.context.userKey 
-        }, 
+        {
+          err: String(error),
+          botId: this.context.botId,
+          to: this.context.userKey
+        },
         'Error sending WhatsApp location'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Send document file
+   */
+  async sendDocument(options: { url: string; fileName?: string; mimeType?: string; caption?: string; title?: string }): Promise<void> {
+    try {
+      await this.sock.sendMessage(this.jid, {
+        document: { url: options.url },
+        fileName: options.fileName || 'document.pdf',
+        mimetype: options.mimeType || 'application/pdf',
+        caption: options.caption || options.title || '',
+      });
+
+      logger.info(
+        {
+          botId: this.context.botId,
+          to: this.context.userKey,
+          documentUrl: options.url,
+          fileName: options.fileName,
+        },
+        'WhatsApp document sent'
+      );
+    } catch (error) {
+      logger.error(
+        {
+          err: String(error),
+          botId: this.context.botId,
+          to: this.context.userKey,
+          documentUrl: options.url,
+        },
+        'Error sending WhatsApp document'
       );
       throw error;
     }

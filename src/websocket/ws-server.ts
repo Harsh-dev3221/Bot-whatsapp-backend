@@ -77,6 +77,7 @@ export function initWebSocketServer(httpServer: Server): WebSocketServer {
 
   // Handle new connections
   wss.on('connection', (ws: WebSocket, request: IncomingMessage, meta: ConnectionMeta) => {
+    void request; // suppress TS6133 unused-parameter
     handleConnection(ws, meta);
   });
 

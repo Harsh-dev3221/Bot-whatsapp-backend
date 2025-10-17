@@ -6,109 +6,109 @@
  */
 
 (function () {
-    'use strict';
+  'use strict';
 
-    // Prevent multiple initializations
-    if (window.BotChat && window.BotChat.initialized) {
+  // Prevent multiple initializations
+  if (window.BotChat && window.BotChat.initialized) {
+    console.warn('BotChat widget already initialized');
+    return;
+  }
+
+  // Global BotChat object
+  window.BotChat = {
+    initialized: false,
+    config: null,
+    widget: null,
+    ws: null,
+    sessionData: null,
+
+    /**
+     * Initialize the chat widget
+     * @param {Object} config - Configuration object
+     * @param {string} config.botId - Bot ID
+     * @param {string} config.token - Widget token
+     * @param {string} config.apiBase - API base URL (default: http://localhost:3000)
+     * @param {Object} config.theme - Theme configuration
+     */
+    init: function (config) {
+      if (this.initialized) {
         console.warn('BotChat widget already initialized');
         return;
-    }
+      }
 
-    // Global BotChat object
-    window.BotChat = {
-        initialized: false,
-        config: null,
-        widget: null,
-        ws: null,
-        sessionData: null,
+      // Validate config
+      if (!config.botId || !config.token) {
+        console.error('BotChat: botId and token are required');
+        return;
+      }
 
-        /**
-         * Initialize the chat widget
-         * @param {Object} config - Configuration object
-         * @param {string} config.botId - Bot ID
-         * @param {string} config.token - Widget token
-         * @param {string} config.apiBase - API base URL (default: http://localhost:3000)
-         * @param {Object} config.theme - Theme configuration
-         */
-        init: function (config) {
-            if (this.initialized) {
-                console.warn('BotChat widget already initialized');
-                return;
+      this.config = {
+        botId: config.botId,
+        token: config.token,
+        apiBase: config.apiBase || 'http://localhost:3000',
+        theme: config.theme || {
+          primaryColor: '#5A3EF0',
+          botName: 'AI Assistant'
+        }
+      };
+
+      this.initialized = true;
+
+      // Initialize session
+      this.initializeSession();
+    },
+
+    /**
+     * Initialize chat session
+     */
+    initializeSession: async function () {
+      try {
+        const response = await fetch(`${this.config.apiBase}/api/webview/${this.config.botId}/session`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            token: this.config.token,
+            pageUrl: window.location.href,
+            metadata: {
+              userAgent: navigator.userAgent,
+              timestamp: new Date().toISOString()
             }
+          })
+        });
 
-            // Validate config
-            if (!config.botId || !config.token) {
-                console.error('BotChat: botId and token are required');
-                return;
-            }
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error?.message || `Failed to initialize session: ${response.statusText}`);
+        }
 
-            this.config = {
-                botId: config.botId,
-                token: config.token,
-                apiBase: config.apiBase || 'http://localhost:3000',
-                theme: config.theme || {
-                    primaryColor: '#5A3EF0',
-                    botName: 'AI Assistant'
-                }
-            };
+        this.sessionData = await response.json();
+        console.log('BotChat session initialized:', this.sessionData.sessionId);
 
-            this.initialized = true;
+        // Create widget UI
+        this.createWidget();
 
-            // Initialize session
-            this.initializeSession();
-        },
+        // Connect to WebSocket
+        this.connectWebSocket();
 
-        /**
-         * Initialize chat session
-         */
-        initializeSession: async function () {
-            try {
-                const response = await fetch(`${this.config.apiBase}/api/webview/${this.config.botId}/session`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        token: this.config.token,
-                        pageUrl: window.location.href,
-                        metadata: {
-                            userAgent: navigator.userAgent,
-                            timestamp: new Date().toISOString()
-                        }
-                    })
-                });
+      } catch (error) {
+        console.error('BotChat initialization error:', error);
+        this.showError('Failed to connect to chat server');
+      }
+    },
 
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.error?.message || `Failed to initialize session: ${response.statusText}`);
-                }
+    /**
+     * Create widget UI elements
+     */
+    createWidget: function () {
+      // Inject CSS
+      this.injectStyles();
 
-                this.sessionData = await response.json();
-                console.log('BotChat session initialized:', this.sessionData.sessionId);
-
-                // Create widget UI
-                this.createWidget();
-
-                // Connect to WebSocket
-                this.connectWebSocket();
-
-            } catch (error) {
-                console.error('BotChat initialization error:', error);
-                this.showError('Failed to connect to chat server');
-            }
-        },
-
-        /**
-         * Create widget UI elements
-         */
-        createWidget: function () {
-            // Inject CSS
-            this.injectStyles();
-
-            // Create widget container
-            const widgetContainer = document.createElement('div');
-            widgetContainer.id = 'botchat-widget-container';
-            widgetContainer.innerHTML = `
+      // Create widget container
+      const widgetContainer = document.createElement('div');
+      widgetContainer.id = 'botchat-widget-container';
+      widgetContainer.innerHTML = `
         <!-- Chat Button -->
         <button id="botchat-toggle-btn" class="botchat-toggle-btn" aria-label="Open chat">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -163,20 +163,20 @@
         </div>
       `;
 
-            document.body.appendChild(widgetContainer);
+      document.body.appendChild(widgetContainer);
 
-            // Attach event listeners
-            this.attachEventListeners();
-        },
+      // Attach event listeners
+      this.attachEventListeners();
+    },
 
-        /**
-         * Inject widget styles
-         */
-        injectStyles: function () {
-            const primaryColor = this.config.theme.primaryColor || '#5A3EF0';
+    /**
+     * Inject widget styles
+     */
+    injectStyles: function () {
+      const primaryColor = this.config.theme.primaryColor || '#5A3EF0';
 
-            const style = document.createElement('style');
-            style.textContent = `
+      const style = document.createElement('style');
+      style.textContent = `
         #botchat-widget-container * {
           box-sizing: border-box;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
@@ -326,6 +326,58 @@
           border-bottom-right-radius: 4px;
         }
 
+        .botchat-document {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 4px;
+          background: #f8f9fa;
+          border-radius: 8px;
+          border: 1px solid #dee2e6;
+        }
+
+        .botchat-document-icon {
+          font-size: 32px;
+          flex-shrink: 0;
+        }
+
+        .botchat-document-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .botchat-document-name {
+          font-weight: 500;
+          font-size: 14px;
+          color: #333;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .botchat-document-caption {
+          font-size: 12px;
+          color: #666;
+          margin-top: 2px;
+        }
+
+        .botchat-document-download {
+          padding: 8px;
+          background: ${primaryColor};
+          color: white;
+          border-radius: 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-decoration: none;
+          flex-shrink: 0;
+          transition: background 0.2s;
+        }
+
+        .botchat-document-download:hover {
+          background: ${this.adjustColor(primaryColor, -20)};
+        }
+
         .botchat-input-container {
           padding: 16px;
           background: white;
@@ -388,169 +440,239 @@
         }
       `;
 
-            document.head.appendChild(style);
-        },
+      document.head.appendChild(style);
+    },
 
-        /**
-         * Attach event listeners
-         */
-        attachEventListeners: function () {
-            const toggleBtn = document.getElementById('botchat-toggle-btn');
-            const closeBtn = document.getElementById('botchat-close-btn');
-            const sendBtn = document.getElementById('botchat-send-btn');
-            const input = document.getElementById('botchat-input');
-            const chatWindow = document.getElementById('botchat-window');
+    /**
+     * Attach event listeners
+     */
+    attachEventListeners: function () {
+      const toggleBtn = document.getElementById('botchat-toggle-btn');
+      const closeBtn = document.getElementById('botchat-close-btn');
+      const sendBtn = document.getElementById('botchat-send-btn');
+      const input = document.getElementById('botchat-input');
+      const chatWindow = document.getElementById('botchat-window');
 
-            toggleBtn.addEventListener('click', () => {
-                chatWindow.style.display = 'flex';
-                toggleBtn.style.display = 'none';
-                input.focus();
-            });
+      toggleBtn.addEventListener('click', () => {
+        chatWindow.style.display = 'flex';
+        toggleBtn.style.display = 'none';
+        input.focus();
+      });
 
-            closeBtn.addEventListener('click', () => {
-                chatWindow.style.display = 'none';
-                toggleBtn.style.display = 'flex';
-            });
+      closeBtn.addEventListener('click', () => {
+        chatWindow.style.display = 'none';
+        toggleBtn.style.display = 'flex';
+      });
 
-            sendBtn.addEventListener('click', () => this.sendMessage());
+      sendBtn.addEventListener('click', () => this.sendMessage());
 
-            input.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    this.sendMessage();
-                }
-            });
-        },
-
-        /**
-         * Connect to WebSocket
-         */
-        connectWebSocket: function () {
-            const wsUrl = this.sessionData.wsUrl;
-            this.ws = new WebSocket(wsUrl);
-
-            this.ws.onopen = () => {
-                console.log('WebSocket connected');
-                // Authenticate
-                this.ws.send(JSON.stringify({
-                    type: 'auth',
-                    jwt: this.sessionData.jwt
-                }));
-            };
-
-            this.ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    this.handleWebSocketMessage(data);
-                } catch (error) {
-                    console.error('Failed to parse WebSocket message:', error);
-                }
-            };
-
-            this.ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-            };
-
-            this.ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                // Attempt reconnection after 3 seconds
-                setTimeout(() => {
-                    if (this.sessionData) {
-                        this.connectWebSocket();
-                    }
-                }, 3000);
-            };
-        },
-
-        /**
-         * Handle WebSocket messages
-         */
-        handleWebSocketMessage: function (data) {
-            switch (data.type) {
-                case 'authenticated':
-                    console.log('WebSocket authenticated');
-                    break;
-
-                case 'bot_message':
-                    this.addBotMessage(data.text);
-                    break;
-
-                case 'error':
-                    console.error('Server error:', data.message);
-                    break;
-
-                default:
-                    console.log('Unknown message type:', data.type);
-            }
-        },
-
-        /**
-         * Send user message
-         */
-        sendMessage: function () {
-            const input = document.getElementById('botchat-input');
-            const text = input.value.trim();
-
-            if (!text || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-                return;
-            }
-
-            // Add user message to UI
-            this.addUserMessage(text);
-
-            // Send to server
-            this.ws.send(JSON.stringify({
-                type: 'user_message',
-                text: text
-            }));
-
-            // Clear input
-            input.value = '';
-        },
-
-        /**
-         * Add user message to UI
-         */
-        addUserMessage: function (text) {
-            const messagesContainer = document.getElementById('botchat-messages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'botchat-message botchat-user-message';
-            messageDiv.innerHTML = `
-        <div class="botchat-message-content">${this.escapeHtml(text)}</div>
-      `;
-            messagesContainer.appendChild(messageDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        },
-
-        /**
-         * Add bot message to UI
-         */
-        addBotMessage: function (text) {
-            const messagesContainer = document.getElementById('botchat-messages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'botchat-message botchat-bot-message';
-            messageDiv.innerHTML = `
-        <div class="botchat-message-content">${this.escapeHtml(text)}</div>
-      `;
-            messagesContainer.appendChild(messageDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        },
-
-        /**
-         * Show error message
-         */
-        showError: function (message) {
-            this.addBotMessage(`⚠️ ${message}`);
-        },
-
-        /**
-         * Escape HTML to prevent XSS
-         */
-        escapeHtml: function (text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+      input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          this.sendMessage();
         }
-    };
+      });
+    },
 
-    console.log('BotChat widget loaded. Call BotChat.init() to start.');
+    /**
+     * Connect to WebSocket
+     */
+    connectWebSocket: function () {
+      const wsUrl = this.sessionData.wsUrl;
+      this.ws = new WebSocket(wsUrl);
+
+      this.ws.onopen = () => {
+        console.log('WebSocket connected');
+        // Authenticate
+        this.ws.send(JSON.stringify({
+          type: 'auth',
+          jwt: this.sessionData.jwt
+        }));
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.handleWebSocketMessage(data);
+        } catch (error) {
+          console.error('Failed to parse WebSocket message:', error);
+        }
+      };
+
+      this.ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      this.ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        // Attempt reconnection after 3 seconds
+        setTimeout(() => {
+          if (this.sessionData) {
+            this.connectWebSocket();
+          }
+        }, 3000);
+      };
+    },
+
+    /**
+     * Handle WebSocket messages
+     */
+    handleWebSocketMessage: function (data) {
+      switch (data.type) {
+        case 'authenticated':
+          console.log('WebSocket authenticated');
+          break;
+
+        case 'bot_message':
+          // Check if it's a document message
+          if (data.document) {
+            this.addDocumentMessage(data.document);
+          } else {
+            this.addBotMessage(data.text);
+          }
+          break;
+
+        case 'error':
+          console.error('Server error:', data.message);
+          break;
+
+        default:
+          console.log('Unknown message type:', data.type);
+      }
+    },
+
+    /**
+     * Send user message
+     */
+    sendMessage: function () {
+      const input = document.getElementById('botchat-input');
+      const text = input.value.trim();
+
+      if (!text || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      // Add user message to UI
+      this.addUserMessage(text);
+
+      // Send to server
+      this.ws.send(JSON.stringify({
+        type: 'user_message',
+        text: text
+      }));
+
+      // Clear input
+      input.value = '';
+    },
+
+    /**
+     * Add user message to UI
+     */
+    addUserMessage: function (text) {
+      const messagesContainer = document.getElementById('botchat-messages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'botchat-message botchat-user-message';
+      messageDiv.innerHTML = `
+        <div class="botchat-message-content">${this.escapeHtml(text)}</div>
+      `;
+      messagesContainer.appendChild(messageDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    },
+
+    /**
+     * Add bot message to UI
+     */
+    addBotMessage: function (text) {
+      const messagesContainer = document.getElementById('botchat-messages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'botchat-message botchat-bot-message';
+      messageDiv.innerHTML = `
+        <div class="botchat-message-content">${this.escapeHtml(text)}</div>
+      `;
+      messagesContainer.appendChild(messageDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    },
+
+    /**
+     * Add document message to UI
+     */
+    addDocumentMessage: function (document) {
+      const messagesContainer = document.getElementById('botchat-messages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'botchat-message botchat-bot-message';
+
+      const fileName = document.fileName || 'document.pdf';
+      const fileIcon = this.getFileIcon(fileName);
+
+      messageDiv.innerHTML = `
+        <div class="botchat-message-content">
+          <div class="botchat-document">
+            <div class="botchat-document-icon">${fileIcon}</div>
+            <div class="botchat-document-info">
+              <div class="botchat-document-name">${this.escapeHtml(fileName)}</div>
+              ${document.caption ? `<div class="botchat-document-caption">${this.escapeHtml(document.caption)}</div>` : ''}
+            </div>
+            <a href="${document.url}" target="_blank" rel="noopener noreferrer" class="botchat-document-download" download="${fileName}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </a>
+          </div>
+        </div>
+      `;
+      messagesContainer.appendChild(messageDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    },
+
+    /**
+     * Get file icon based on file name
+     */
+    getFileIcon: function (fileName) {
+      const ext = fileName.split('.').pop().toLowerCase();
+      const icons = {
+        pdf: '📄',
+        doc: '📝',
+        docx: '📝',
+        xls: '📊',
+        xlsx: '📊',
+        ppt: '📽️',
+        pptx: '📽️',
+        txt: '📃',
+        zip: '🗜️',
+        default: '📎'
+      };
+      return icons[ext] || icons.default;
+    },
+
+    /**
+     * Show error message
+     */
+    showError: function (message) {
+      this.addBotMessage(`⚠️ ${message}`);
+    },
+
+    /**
+     * Escape HTML to prevent XSS
+     */
+    escapeHtml: function (text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    },
+
+    /**
+     * Adjust color brightness
+     */
+    adjustColor: function (color, amount) {
+      const hex = color.replace('#', '');
+      const num = parseInt(hex, 16);
+      const r = Math.max(0, Math.min(255, (num >> 16) + amount));
+      const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amount));
+      const b = Math.max(0, Math.min(255, (num & 0x0000FF) + amount));
+      return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+    }
+  };
+
+  console.log('BotChat widget loaded. Call BotChat.init() to start.');
 })();

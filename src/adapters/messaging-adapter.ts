@@ -19,6 +19,14 @@ export interface SendRichOptions {
   metadata?: Record<string, any>;
 }
 
+export interface SendDocumentOptions {
+  url: string;
+  fileName?: string;
+  mimeType?: string;
+  caption?: string;
+  title?: string;
+}
+
 export interface SendErrorOptions {
   code: string;
   message: string;
@@ -37,6 +45,11 @@ export interface MessagingAdapter {
    * Send a text message
    */
   sendText(options: SendTextOptions): Promise<void>;
+
+  /**
+   * Send a document/file attachment (optional)
+   */
+  sendDocument?(options: SendDocumentOptions): Promise<void>;
 
   /**
    * Send rich content (optional - not all channels support this)
