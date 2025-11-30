@@ -18,6 +18,7 @@ import webviewRoutes from './routes/webview.js';
 import webBotRoutes from './routes/web-bot.js';
 import workflowsRoutes from './routes/workflows.js';
 import inquiriesRoutes from './routes/inquiries.js';
+import authRoutes from './routes/auth.js';
 import { BotManager } from './services/bot-manager.js';
 import { initWebSocketServer } from './websocket/ws-server.js';
 
@@ -77,6 +78,7 @@ app.get('/health', (c) => {
 });
 
 // API routes
+app.route('/api/auth', authRoutes);
 app.route('/api/businesses', businessesRoutes);
 app.route('/api/businesses', bookingSettingsRoutes);
 app.route('/api/bots', botsRoutes);
